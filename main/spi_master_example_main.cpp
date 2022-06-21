@@ -221,7 +221,7 @@ void lcd_data(spi_device_handle_t spi, const uint8_t *data, int len)
 void lcd_spi_pre_transfer_callback(spi_transaction_t *t)
 {
     int dc=(int)t->user;
-    gpio_set_level(PIN_NUM_DC, dc);
+    gpio_set_level((gpio_num_t)PIN_NUM_DC, dc);
 }
 
 uint32_t lcd_get_id(spi_device_handle_t spi)
@@ -248,14 +248,14 @@ void lcd_init(spi_device_handle_t spi)
     const lcd_init_cmd_t* lcd_init_cmds;
 
     //Initialize non-SPI GPIOs
-    gpio_set_direction(PIN_NUM_DC, GPIO_MODE_OUTPUT);
-    gpio_set_direction(PIN_NUM_RST, GPIO_MODE_OUTPUT);
-    gpio_set_direction(PIN_NUM_BCKL, GPIO_MODE_OUTPUT);
+    gpio_set_direction((gpio_num_t)PIN_NUM_DC, GPIO_MODE_OUTPUT);
+    gpio_set_direction((gpio_num_t)PIN_NUM_RST, GPIO_MODE_OUTPUT);
+    gpio_set_direction((gpio_num_t)PIN_NUM_BCKL, GPIO_MODE_OUTPUT);
 
     //Reset the display
-    gpio_set_level(PIN_NUM_RST, 0);
+    gpio_set_level((gpio_num_t)PIN_NUM_RST, 0);
     vTaskDelay(100 / portTICK_RATE_MS);
-    gpio_set_level(PIN_NUM_RST, 1);
+    gpio_set_level((gpio_num_t)PIN_NUM_RST, 1);
     vTaskDelay(100 / portTICK_RATE_MS);
 
     //detect LCD type
@@ -302,7 +302,7 @@ void lcd_init(spi_device_handle_t spi)
     }
 
     ///Enable backlight
-    gpio_set_level(PIN_NUM_BCKL, 0);
+    gpio_set_level((gpio_num_t)PIN_NUM_BCKL, 0);
 }
 
 
@@ -385,7 +385,7 @@ static void display_pretty_colors(spi_device_handle_t spi)
     uint16_t *lines[2];
     //Allocate memory for the pixel buffers
     for (int i=0; i<2; i++) {
-        lines[i]=heap_caps_malloc(320*PARALLEL_LINES*sizeof(uint16_t), MALLOC_CAP_DMA);
+        lines[i]=(uint16_t*)heap_caps_malloc(320*PARALLEL_LINES*sizeof(uint16_t), MALLOC_CAP_DMA);
         assert(lines[i]!=NULL);
     }
     int frame=0;
@@ -412,29 +412,36 @@ static void display_pretty_colors(spi_device_handle_t spi)
     }
 }
 
+extern "C" {
+    void app_main();
+}
+
 void app_main(void)
 {
     esp_err_t ret;
     spi_device_handle_t spi;
-    spi_bus_config_t buscfg={
-        .miso_io_num=PIN_NUM_MISO,
-        .mosi_io_num=PIN_NUM_MOSI,
-        .sclk_io_num=PIN_NUM_CLK,
-        .quadwp_io_num=-1,
-        .quadhd_io_num=-1,
-        .max_transfer_sz=PARALLEL_LINES*320*2+8
-    };
-    spi_device_interface_config_t devcfg={
+    spi_bus_config_t buscfg;
+    memset(&buscfg, 0, sizeof(buscfg));
+
+    buscfg.mosi_io_num=PIN_NUM_MOSI;
+    buscfg.miso_io_num=PIN_NUM_MISO;
+    buscfg.sclk_io_num=PIN_NUM_CLK;
+    buscfg.quadwp_io_num=-1;
+    buscfg.quadhd_io_num=-1;
+    buscfg.max_transfer_sz=PARALLEL_LINES*320*2+8;
+
+    spi_device_interface_config_t devcfg;
+    memset(&devcfg, 0, sizeof(devcfg));
 #ifdef CONFIG_LCD_OVERCLOCK
-        .clock_speed_hz=26*1000*1000,           //Clock out at 26 MHz
+    devcfg.clock_speed_hz=26*1000*1000,           //Clock out at 26 MHz
 #else
-        .clock_speed_hz=10*1000*1000,           //Clock out at 10 MHz
+    devcfg.clock_speed_hz=10*1000*1000,           //Clock out at 10 MHz
 #endif
-        .mode=0,                                //SPI mode 0
-        .spics_io_num=PIN_NUM_CS,               //CS pin
-        .queue_size=7,                          //We want to be able to queue 7 transactions at a time
-        .pre_cb=lcd_spi_pre_transfer_callback,  //Specify pre-transfer callback to handle D/C line
-    };
+    devcfg.mode=0,                                //SPI mode 0
+    devcfg.spics_io_num=PIN_NUM_CS,               //CS pin
+    devcfg.queue_size=7,                          //We want to be able to queue 7 transactions at a time
+    devcfg.pre_cb=lcd_spi_pre_transfer_callback,  //Specify pre-transfer callback to handle D/C line
+
     //Initialize the SPI bus
     ret=spi_bus_initialize(LCD_HOST, &buscfg, SPI_DMA_CH_AUTO);
     ESP_ERROR_CHECK(ret);

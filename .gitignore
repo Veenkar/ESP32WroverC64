@@ -1,0 +1,12 @@
+# IDE
+.devcontainer
+.vscode
+
+# BUILD
+BUILD
+
+# other dirs
+trash
+
+# other files
+*.log
